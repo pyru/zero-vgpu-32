@@ -1,0 +1,357 @@
+{
+  "baseline": {
+    "stage": "baseline",
+    "world_size": 1,
+    "steps": 8,
+    "wall_s": 1.1689949000137858,
+    "params": 928512,
+    "param_bytes": 3714048,
+    "losses": [
+      6.272486686706543,
+      6.080793380737305,
+      5.820629119873047,
+      5.685081481933594,
+      5.408263206481934,
+      5.480902194976807,
+      5.1552815437316895,
+      4.997026443481445
+    ],
+    "peak_total": 51826692,
+    "peak_by_cat": {
+      "params": 3714048,
+      "grads": 3714048,
+      "optimizer": 7428096,
+      "activations": 36970500,
+      "comm": 0
+    },
+    "peak_model_state": 14856192,
+    "resident_params": 3714048,
+    "resident_optimizer": 7428096,
+    "comm_bytes_per_rank_per_step": 0.0,
+    "comm_calls_per_step": 0.0,
+    "comm_seconds_modelled": 0,
+    "comm_by_op": {},
+    "step_wall_seconds": 1.1541359000257216,
+    "comm_ratio_psi": 0.0
+  },
+  "ddp": {
+    "stage": "ddp",
+    "world_size": 32,
+    "steps": 8,
+    "wall_s": 9.278419099980965,
+    "params": 928512,
+    "param_bytes": 3714048,
+    "losses": [
+      6.272486209869385,
+      6.0807929039001465,
+      5.8206281661987305,
+      5.685080528259277,
+      5.40826416015625,
+      5.48089075088501,
+      5.155267238616943,
+      4.997033596038818
+    ],
+    "peak_total": 16138500,
+    "peak_by_cat": {
+      "params": 3714048,
+      "grads": 3714048,
+      "optimizer": 7428096,
+      "activations": 1282308,
+      "comm": 793088
+    },
+    "peak_model_state": 14856192,
+    "resident_params": 3714048,
+    "resident_optimizer": 7428096,
+    "comm_bytes_per_rank_per_step": 7195968.0,
+    "comm_calls_per_step": 6.0,
+    "comm_seconds_modelled": 0.006143892480000004,
+    "comm_by_op": {
+      "all_reduce": 7195968.0
+    },
+    "step_wall_seconds": 8.919585234379156,
+    "comm_ratio_psi": 1.9375
+  },
+  "zero1": {
+    "stage": "zero1",
+    "world_size": 32,
+    "steps": 8,
+    "wall_s": 9.24453219998395,
+    "params": 928512,
+    "param_bytes": 3714048,
+    "losses": [
+      6.272486209869385,
+      6.0807929039001465,
+      5.8206281661987305,
+      5.685080528259277,
+      5.408263683319092,
+      5.48089075088501,
+      5.155267238616943,
+      4.997033596038818
+    ],
+    "peak_total": 8942532,
+    "peak_by_cat": {
+      "params": 3714048,
+      "grads": 3714048,
+      "optimizer": 232128,
+      "activations": 1282308,
+      "comm": 817872
+    },
+    "peak_model_state": 7660224,
+    "resident_params": 3714048,
+    "resident_optimizer": 232128,
+    "comm_bytes_per_rank_per_step": 7195968.0,
+    "comm_calls_per_step": 12.0,
+    "comm_seconds_modelled": 0.006143892480000004,
+    "comm_by_op": {
+      "reduce_scatter": 3597984.0,
+      "all_gather": 3597984.0
+    },
+    "step_wall_seconds": 8.931962068748362,
+    "comm_ratio_psi": 1.9375
+  },
+  "zero2": {
+    "stage": "zero2",
+    "world_size": 32,
+    "steps": 8,
+    "wall_s": 9.844437599997036,
+    "params": 928512,
+    "param_bytes": 3714048,
+    "losses": [
+      6.272486209869385,
+      6.0807929039001465,
+      5.8206281661987305,
+      5.685080528259277,
+      5.408263683319092,
+      5.48089075088501,
+      5.155267238616943,
+      4.997033596038818
+    ],
+    "peak_total": 6104148,
+    "peak_by_cat": {
+      "params": 3714048,
+      "grads": 875664,
+      "optimizer": 232128,
+      "activations": 1282308,
+      "comm": 817872
+    },
+    "peak_model_state": 4821840,
+    "resident_params": 3714048,
+    "resident_optimizer": 232128,
+    "comm_bytes_per_rank_per_step": 7195968.0,
+    "comm_calls_per_step": 12.0,
+    "comm_seconds_modelled": 0.006143892480000004,
+    "comm_by_op": {
+      "reduce_scatter": 3597984.0,
+      "all_gather": 3597984.0
+    },
+    "step_wall_seconds": 9.541726075000042,
+    "comm_ratio_psi": 1.9375
+  },
+  "zero3": {
+    "stage": "zero3",
+    "world_size": 32,
+    "steps": 8,
+    "wall_s": 11.891302700008964,
+    "params": 928512,
+    "param_bytes": 3714048,
+    "losses": [
+      6.272486209869385,
+      6.0807929039001465,
+      5.8206281661987305,
+      5.685080528259277,
+      5.408263683319092,
+      5.48089075088501,
+      5.155267238616943,
+      4.997033596038818
+    ],
+    "peak_total": 2295476,
+    "peak_by_cat": {
+      "params": 116064,
+      "grads": 875664,
+      "optimizer": 232128,
+      "activations": 278532,
+      "comm": 793088
+    },
+    "peak_model_state": 1223856,
+    "resident_params": 116064,
+    "resident_optimizer": 232128,
+    "comm_bytes_per_rank_per_step": 10793952.0,
+    "comm_calls_per_step": 18.0,
+    "comm_seconds_modelled": 0.009215838719999998,
+    "comm_by_op": {
+      "all_gather": 7195968.0,
+      "reduce_scatter": 3597984.0
+    },
+    "step_wall_seconds": 11.555377090632646,
+    "comm_ratio_psi": 2.90625
+  },
+  "_meta": {
+    "params": 928512,
+    "world": 32,
+    "steps": 8,
+    "batch": 32,
+    "torch": "2.11.0+cpu"
+  },
+  "_sweep": {
+    "1": {
+      "ddp": {
+        "peak_model_state": 14856192,
+        "peak_total": 51728388,
+        "comm_ratio": 0.0
+      },
+      "zero1": {
+        "peak_model_state": 14856192,
+        "peak_total": 51728388,
+        "comm_ratio": 0.0
+      },
+      "zero2": {
+        "peak_model_state": 14856192,
+        "peak_total": 51728388,
+        "comm_ratio": 0.0
+      },
+      "zero3": {
+        "peak_model_state": 14856192,
+        "peak_total": 20122116,
+        "comm_ratio": 0.0
+      }
+    },
+    "2": {
+      "ddp": {
+        "peak_model_state": 14856192,
+        "peak_total": 33308676,
+        "comm_ratio": 1.0
+      },
+      "zero1": {
+        "peak_model_state": 11142144,
+        "peak_total": 29594628,
+        "comm_ratio": 1.0
+      },
+      "zero2": {
+        "peak_model_state": 9542400,
+        "peak_total": 27994884,
+        "comm_ratio": 1.0
+      },
+      "zero3": {
+        "peak_model_state": 7685376,
+        "peak_total": 10870532,
+        "comm_ratio": 1.5
+      }
+    },
+    "4": {
+      "ddp": {
+        "peak_model_state": 14856192,
+        "peak_total": 24098820,
+        "comm_ratio": 1.5
+      },
+      "zero1": {
+        "peak_model_state": 9285120,
+        "peak_total": 18527748,
+        "comm_ratio": 1.5
+      },
+      "zero2": {
+        "peak_model_state": 7024768,
+        "peak_total": 16267396,
+        "comm_ratio": 1.5
+      },
+      "zero3": {
+        "peak_model_state": 4239232,
+        "peak_total": 6244740,
+        "comm_ratio": 2.25
+      }
+    },
+    "8": {
+      "ddp": {
+        "peak_model_state": 14856192,
+        "peak_total": 19493892,
+        "comm_ratio": 1.75
+      },
+      "zero1": {
+        "peak_model_state": 8356608,
+        "peak_total": 12994308,
+        "comm_ratio": 1.75
+      },
+      "zero2": {
+        "peak_model_state": 5765952,
+        "peak_total": 10403652,
+        "comm_ratio": 1.75
+      },
+      "zero3": {
+        "peak_model_state": 2516160,
+        "peak_total": 3931844,
+        "comm_ratio": 2.625
+      }
+    },
+    "16": {
+      "ddp": {
+        "peak_model_state": 14856192,
+        "peak_total": 17191428,
+        "comm_ratio": 1.875
+      },
+      "zero1": {
+        "peak_model_state": 7892352,
+        "peak_total": 10227588,
+        "comm_ratio": 1.875
+      },
+      "zero2": {
+        "peak_model_state": 5136544,
+        "peak_total": 7471780,
+        "comm_ratio": 1.875
+      },
+      "zero3": {
+        "peak_model_state": 1654624,
+        "peak_total": 2775396,
+        "comm_ratio": 2.8125
+      }
+    },
+    "32": {
+      "ddp": {
+        "peak_model_state": 14856192,
+        "peak_total": 16040196,
+        "comm_ratio": 1.9375
+      },
+      "zero1": {
+        "peak_model_state": 7660224,
+        "peak_total": 8844228,
+        "comm_ratio": 1.9375
+      },
+      "zero2": {
+        "peak_model_state": 4821840,
+        "peak_total": 6005844,
+        "comm_ratio": 1.9375
+      },
+      "zero3": {
+        "peak_model_state": 1223856,
+        "peak_total": 2197172,
+        "comm_ratio": 2.90625
+      }
+    }
+  },
+  "_fair_checkpointed": {
+    "ddp": {
+      "activations": 212996,
+      "peak_model_state": 14856192,
+      "peak_total": 15649280
+    },
+    "zero1": {
+      "activations": 212996,
+      "peak_model_state": 7660224,
+      "peak_total": 7873220
+    },
+    "zero2": {
+      "activations": 212996,
+      "peak_model_state": 4821840,
+      "peak_total": 5034836
+    },
+    "zero3": {
+      "activations": 212996,
+      "peak_model_state": 1223856,
+      "peak_total": 2229940
+    }
+  },
+  "_analytic_7p5B_N32": {
+    "DDP (no ZeRO)": 111.75870895385742,
+    "ZeRO-1 (Pos)": 30.55902197957039,
+    "ZeRO-2 (Pos+g)": 17.025740817189217,
+    "ZeRO-3 (Pos+g+p)": 3.4924596548080444
+  }
+}
