@@ -3,7 +3,7 @@
     "stage": "baseline",
     "world_size": 1,
     "steps": 8,
-    "wall_s": 1.7104991999804042,
+    "wall_s": 1.9609641999995802,
     "params": 928512,
     "param_bytes": 3714048,
     "losses": [
@@ -34,14 +34,18 @@
     "gpus_per_node": 1,
     "topology": "1 GPUs in 1 node, all on NVLink / NVSwitch (intra-node) @ 450.0 GB/s",
     "comm_by_op": {},
-    "step_wall_seconds": 1.6874243000056595,
+    "step_wall_seconds": 1.9313949999632314,
+    "layer_evals_per_step": 6.0,
+    "optim_elems_per_step": 928512.0,
+    "tokens_per_rank": 1024,
+    "n_groups": 6,
     "comm_ratio_psi": 0.0
   },
   "ddp": {
     "stage": "ddp",
     "world_size": 32,
     "steps": 8,
-    "wall_s": 12.235245499992743,
+    "wall_s": 14.569364599999972,
     "params": 928512,
     "param_bytes": 3714048,
     "losses": [
@@ -74,14 +78,18 @@
     "comm_by_op": {
       "all_reduce": 7195968.0
     },
-    "step_wall_seconds": 11.703145250007765,
+    "step_wall_seconds": 13.952234075009983,
+    "layer_evals_per_step": 6.0,
+    "optim_elems_per_step": 928512.0,
+    "tokens_per_rank": 32,
+    "n_groups": 6,
     "comm_ratio_psi": 1.9375
   },
   "zero1": {
     "stage": "zero1",
     "world_size": 32,
     "steps": 8,
-    "wall_s": 12.976622299989685,
+    "wall_s": 17.54445059999125,
     "params": 928512,
     "param_bytes": 3714048,
     "losses": [
@@ -115,14 +123,18 @@
       "reduce_scatter": 3597984.0,
       "all_gather": 3597984.0
     },
-    "step_wall_seconds": 12.50733931562445,
+    "step_wall_seconds": 16.88933830312544,
+    "layer_evals_per_step": 6.0,
+    "optim_elems_per_step": 29016.0,
+    "tokens_per_rank": 32,
+    "n_groups": 6,
     "comm_ratio_psi": 1.9375
   },
   "zero2": {
     "stage": "zero2",
     "world_size": 32,
     "steps": 8,
-    "wall_s": 14.187890299974242,
+    "wall_s": 20.289808500005165,
     "params": 928512,
     "param_bytes": 3714048,
     "losses": [
@@ -156,14 +168,18 @@
       "reduce_scatter": 3597984.0,
       "all_gather": 3597984.0
     },
-    "step_wall_seconds": 13.655121643753773,
+    "step_wall_seconds": 19.528051596884325,
+    "layer_evals_per_step": 6.0,
+    "optim_elems_per_step": 29016.0,
+    "tokens_per_rank": 32,
+    "n_groups": 6,
     "comm_ratio_psi": 1.9375
   },
   "zero3": {
     "stage": "zero3",
     "world_size": 32,
     "steps": 8,
-    "wall_s": 16.601958799990825,
+    "wall_s": 17.28163099999074,
     "params": 928512,
     "param_bytes": 3714048,
     "losses": [
@@ -197,7 +213,11 @@
       "all_gather": 7195968.0,
       "reduce_scatter": 3597984.0
     },
-    "step_wall_seconds": 16.10297111874297,
+    "step_wall_seconds": 16.679522159377484,
+    "layer_evals_per_step": 12.0,
+    "optim_elems_per_step": 29016.0,
+    "tokens_per_rank": 32,
+    "n_groups": 6,
     "comm_ratio_psi": 2.90625
   },
   "_meta": {

@@ -261,3 +261,65 @@ def fig_topology(single, multi, path=None):
     if path:
         fig.savefig(path, dpi=150)
     return fig
+
+
+def fig_compute(results, psi, path=None):
+    """What ZeRO changes about *arithmetic*, not memory.
+
+    Three per-rank quantities, each normalised to DDP:
+      * model FLOPs      -- unchanged, except ZeRO-3 pays +1/3 for recompute
+      * optimizer work   -- falls by N: DDP runs Adam over every parameter on
+                            every rank, which is N-way redundant
+      * communication    -- unchanged for stages 1-2, 1.5x for stage 3
+    """
+    from .experiment import analytic_flops
+    stages = STAGE_ORDER
+    ddp = results["ddp"]
+
+    def flops(r):
+        return analytic_flops(psi, r["tokens_per_rank"],
+                              r["layer_evals_per_step"] > r["n_groups"])
+
+    series = {
+        "model FLOPs / rank": [flops(results[s]) / flops(ddp) for s in stages],
+        "optimizer work / rank": [results[s]["optim_elems_per_step"]
+                                  / ddp["optim_elems_per_step"] for s in stages],
+        "communication / rank": [results[s]["comm_ratio_psi"]
+                                 / ddp["comm_ratio_psi"] for s in stages],
+    }
+    colors = ["#4C72B0", "#55A868", "#C44E52"]
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12.5, 4.6))
+    xs, w = np.arange(len(stages)), 0.26
+    for i, (k, v) in enumerate(series.items()):
+        bars = ax1.bar(xs + (i - 1) * w, v, w, label=k, color=colors[i],
+                       edgecolor="white")
+        for b, val in zip(bars, v):
+            ax1.text(b.get_x() + b.get_width() / 2, val + 0.03,
+                     f"{val:.2f}" if val >= 0.1 else f"{val:.3f}",
+                     ha="center", fontsize=7.5)
+    ax1.axhline(1.0, ls="--", c="k", lw=1, alpha=0.5)
+    ax1.set_xticks(xs)
+    ax1.set_xticklabels([LABEL[s] for s in stages], rotation=12)
+    _style(ax1, "Per-GPU work, relative to DDP", "", "x DDP  (1.0 = same work)")
+    ax1.legend(frameon=False, fontsize=9)
+    ax1.set_ylim(0, 1.75)
+
+    # the optimizer-redundancy point, on a log axis where it is visible
+    opt = [results[s]["optim_elems_per_step"] for s in stages]
+    ax2.bar([LABEL[s] for s in stages], opt, color="#55A868", edgecolor="white")
+    ax2.axhline(psi, ls="--", c="crimson", lw=1.3)
+    ax2.text(0.02, psi * 1.15, f"the whole model ({psi:,} params)",
+             color="crimson", fontsize=9, transform=ax2.get_yaxis_transform())
+    ax2.set_yscale("log")
+    ax2.tick_params(axis="x", labelrotation=12)
+    _style(ax2, "Adam element-updates per GPU per step", "",
+           "parameter elements updated")
+    n = results["zero1"]["world_size"]
+    ax2.annotate(f"{n}x less\n(DDP does this work\n{n} times over)",
+                 xy=(1, opt[1]), xytext=(1.6, opt[0] * 0.28),
+                 arrowprops=dict(arrowstyle="->", lw=1.2), fontsize=9)
+    fig.tight_layout()
+    if path:
+        fig.savefig(path, dpi=150)
+    return fig

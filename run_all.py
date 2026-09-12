@@ -68,6 +68,14 @@ def main():
     for row in weight_agreement(results):
         print(f"  {row['stage']:9s} max|dW|={row['max_abs_weight_diff']:.3e}")
 
+    print("\n--- computation (per GPU, per step) ---")
+    from vgpu.experiment import compute_table
+    print(compute_table(results, psi).to_string())
+    print(f"  -> ZeRO-1/2/3 do {results['ddp']['optim_elems_per_step']/results['zero1']['optim_elems_per_step']:.0f}x "
+          f"less optimizer arithmetic; DDP repeats it on every rank.")
+    print(f"  -> ZeRO-3 pays {results['zero3']['layer_evals_per_step']/results['ddp']['layer_evals_per_step']:.0f}x "
+          f"the layer evaluations (recompute in backward).")
+
     print("\n--- topology: 1 node of 32 vs 4 nodes of 8 ---")
     single = {s: run_stage(s, cfg, world_size=args.world, steps=3,
                            global_batch=args.batch, gpus_per_node=args.world)
@@ -91,7 +99,8 @@ def main():
     report.fig_timeline(results, path="assets/04_timeline.png")
     report.fig_analytic(path="assets/06_analytic_7B.png")
     report.fig_topology(single, multi, "assets/07_topology.png")
-    print("  wrote assets/01..04, 06, 07")
+    report.fig_compute(results, psi, "assets/08_compute.png")
+    print("  wrote assets/01..04, 06, 07, 08")
 
     sweep = {}
     if not (args.no_sweep or args.quick):

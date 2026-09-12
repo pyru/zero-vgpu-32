@@ -348,6 +348,39 @@ stand behind.
 
 ## 6. What the measurements show
 
+### Computation: what changes, and what doesn't
+
+Memory is only half the assignment's question. Here is what ZeRO does to the *arithmetic* each
+GPU performs, measured by counting layer evaluations and Adam element-updates directly:
+
+| per GPU per step | DDP | ZeRO-1 | ZeRO-2 | ZeRO-3 |
+|---|---|---|---|---|
+| layer evaluations | 6 | 6 | 6 | **12** |
+| model FLOPs (rel. DDP) | 1.00 | 1.00 | 1.00 | **1.33** |
+| Adam element-updates | 928,512 | **29,016** | **29,016** | **29,016** |
+| optimizer work (rel. DDP) | 1.00 | **0.031** | **0.031** | **0.031** |
+| communication | 1.938 ψ | 1.938 ψ | 1.938 ψ | **2.906 ψ** |
+
+![compute](assets/08_compute.png)
+
+Two things move, in opposite directions, and I had only been thinking about one of them:
+
+**Optimizer arithmetic falls by exactly N.** DDP runs Adam over all 928,512 parameters on *every
+one of the 32 ranks* — the same element-wise update computed 32 times over, and 31 of those copies
+are thrown away. ZeRO-1 updates 29,016 elements = ψ/32. So sharding the optimizer does not only
+save 12 bytes/param of memory, it **deletes 32× of redundant computation**. I had been describing
+ZeRO-1 as "free"; it is better than free — it gives memory back *and* removes work.
+
+**Model FLOPs are unchanged, except for ZeRO-3.** Forward and backward cost ~6ψT regardless of
+stage (data parallelism splits the batch, so each rank does 1/N of the tokens, not 1/N of the
+work per token). ZeRO-3 is the exception: it evaluates every layer **twice** — once in forward,
+once recomputed in backward after its weights were freed — which is 6ψT → 8ψT, a measured **1.33×**.
+
+So the full ledger for stage 3 is: 12× less model-state memory, 32× less optimizer work, 1.33×
+more FLOPs, 1.5× more communication. Stages 1 and 2 take the memory and the optimizer-work win
+and pay nothing at all.
+
+
 ### Memory through a single step
 
 ![timeline](assets/04_timeline.png)
@@ -564,31 +597,37 @@ that the point is memory and message accounting, not throughput).
    issued per-layer during backward instead of once at the end. That timing change is worth 4
    bytes/param, and it is why bucket size is a tunable in every real implementation.
 
-4. **Only stage 3 changes the forward pass, and only stage 3 costs anything** (exactly 1.5×, in bytes
-   and in hops). Its payoff is qualitative rather than quantitative: peak parameter memory becomes
+4. **ZeRO-1 is better than free.** Sharding the optimizer removes 12 bytes/param of memory *and*
+   32× of redundant Adam arithmetic, for identical communication. DDP computes the same
+   element-wise update on all 32 ranks and discards 31 of the answers. I only noticed this once I
+   counted element-updates rather than bytes — I had been treating ZeRO purely as a memory
+   optimization, and it is also a compute one.
+
+5. **Only stage 3 changes the forward pass, and only stage 3 costs anything** (exactly 1.5×, in bytes
+   and in hops, plus 1.33× the FLOPs for recompute). Its payoff is qualitative rather than quantitative: peak parameter memory becomes
    "the largest layer" instead of "the model", which is what removes the ceiling entirely.
 
-5. **None of it changes the maths — and the three ZeRO stages are bit-identical to each other.**
+6. **None of it changes the maths — and the three ZeRO stages are bit-identical to each other.**
    That was the most satisfying measurement in the project: the only differences anywhere in the
    experiment are floating-point summation order.
 
-6. **The idealised formulas lie a little, and the gap is where the understanding is.** ZeRO-3's
+7. **The idealised formulas lie a little, and the gap is where the understanding is.** ZeRO-3's
    measured floor was 1.17 MB against a predicted 0.44 MB, entirely because of the one-bucket
    transient. Finding out where a formula stops holding taught me more than reproducing it did.
 
-7. **The cluster is not flat, and that changes the answer.** 32 GPUs is 4 boxes of 8, with ~450
+8. **The cluster is not flat, and that changes the answer.** 32 GPUs is 4 boxes of 8, with ~450
    GB/s inside a box and ~50 GB/s between them. A ring runs at the speed of its slowest hop, so
    crossing a node boundary costs 2.6x on every stage — and because ZeRO-3 moves 1.5x the bytes,
    its *absolute* premium grows with every boundary crossed. I had been thinking about ZeRO as a
    pure memory-vs-bandwidth trade; it is really memory-vs-bandwidth-vs-topology.
 
-8. **The "wasteful" redundant reduction is not wasteful.** Every GPU computing the same average
+9. **The "wasteful" redundant reduction is not wasteful.** Every GPU computing the same average
    looked like obvious duplication until I worked out the alternative: gathering to one rank puts
    2(N-1)Psi through a single wire (62 Psi at N=32, vs 1.94 Psi per link for the ring) and leaves
    31 GPUs idle waiting on a result they cannot proceed without. The redundancy is free because
    the GPUs had nothing else to do.
 
-9. **Measure the confound before you quote the headline.** ZeRO-3 gets activation checkpointing for
+10. **Measure the confound before you quote the headline.** ZeRO-3 gets activation checkpointing for
    free as a side effect of deleting its weights. Before controlling for that I would have quoted a
    number that was partly measuring something else.
 

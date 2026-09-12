@@ -80,6 +80,10 @@ def run_stage(stage, cfg, world_size=32, steps=10, global_batch=32, lr=3e-3,
         topology=fabric.topology(),
         comm_by_op={op: b / max(steps, 1) for op, b in g0.comm.wire_bytes.items()},
         step_wall_seconds=sum(g.compute_seconds for g in fabric.gpus) / world,
+        layer_evals_per_step=eng0.layer_evals / max(steps, 1),
+        optim_elems_per_step=eng0.optim_elems / max(steps, 1),
+        tokens_per_rank=local_bs * cfg.block_size,
+        n_groups=len(eng0.groups),
         fabric=fabric, engines=engines,
         timeline=fabric.gpu(0).mem.timeline,
     )
@@ -157,3 +161,44 @@ def weight_agreement(results, ref_key="baseline"):
                          max_abs_weight_diff=float((w - ref).abs().max()),
                          rel=float((w - ref).abs().max() / ref.abs().max())))
     return rows
+
+
+# --------------------------------------------------------------------------
+# compute accounting
+# --------------------------------------------------------------------------
+def analytic_flops(psi, tokens_per_rank, recompute=False):
+    """Rough per-rank FLOPs for one step, using the standard 6*psi*T rule.
+
+    forward      ~ 2 * psi * T
+    backward     ~ 4 * psi * T
+    recompute    ~ 2 * psi * T   (ZeRO-3 re-runs each layer in backward)
+    """
+    fwd = 2.0 * psi * tokens_per_rank
+    bwd = 4.0 * psi * tokens_per_rank
+    return fwd + bwd + (fwd if recompute else 0.0)
+
+
+def compute_table(results, psi, stages=("ddp", "zero1", "zero2", "zero3")):
+    """What ZeRO changes about *arithmetic*, as opposed to memory.
+
+    Two things change, in opposite directions:
+      * optimizer work falls by N   -- DDP runs Adam over every parameter on
+        every rank, which is N-way redundant; ZeRO-1/2/3 each own 1/N.
+      * model FLOPs rise by 1/3 for ZeRO-3 only, because it must recompute
+        each layer in backward after throwing its weights away.
+    """
+    import pandas as pd
+    rows = []
+    for st in stages:
+        r = results[st]
+        T = r["tokens_per_rank"]
+        recompute = r["layer_evals_per_step"] > r["n_groups"]
+        rows.append(dict(
+            stage=st,
+            layer_evals=r["layer_evals_per_step"],
+            model_TFLOPs=analytic_flops(psi, T, recompute) / 1e12,
+            adam_elements=r["optim_elems_per_step"],
+            adam_vs_ddp=r["optim_elems_per_step"] / results["ddp"]["optim_elems_per_step"],
+            comm_psi=r["comm_ratio_psi"],
+        ))
+    return pd.DataFrame(rows).set_index("stage")

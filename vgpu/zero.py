@@ -48,6 +48,7 @@ class ZeroLayerFn(torch.autograd.Function):
     def forward(ctx, x, shard, engine, gi):
         g = engine.groups[gi]
         spec, mem = g["spec"], engine.mem
+        engine.layer_evals += 1
         with torch.no_grad():
             full = engine.fabric.all_gather(engine.rank, shard)
             mem.alloc("comm", nbytes(full))
@@ -71,6 +72,7 @@ class ZeroLayerFn(torch.autograd.Function):
         g = engine.groups[gi]
         spec, mem = g["spec"], engine.mem
 
+        engine.layer_evals += 1          # ZeRO-3 recomputes the layer here
         with torch.enable_grad():
             if engine.keep_gathered:
                 full = g.pop("_kept").detach().requires_grad_(True)
@@ -114,6 +116,7 @@ class CheckpointLayerFn(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, p, engine, gi):
         spec = engine.groups[gi]["spec"]
+        engine.layer_evals += 1
         with torch.no_grad():
             out = spec.fn(x, unflatten(p[:spec.numel], spec))
         ctx.save_for_backward(x, p)
@@ -125,6 +128,7 @@ class CheckpointLayerFn(torch.autograd.Function):
         x, p = ctx.saved_tensors
         engine, gi = ctx.engine, ctx.gi
         spec = engine.groups[gi]["spec"]
+        engine.layer_evals += 1          # checkpointed recompute
         with torch.enable_grad():
             pin = p.detach().requires_grad_(True)
             wants_x = x.is_floating_point()
@@ -166,6 +170,16 @@ class ZeroEngine:
         self.shard_optim = (stage in ("zero1", "zero2", "zero3"))
         self.t = 0
         self._comm_prev = 0.0
+        # --- compute counters -------------------------------------------
+        # layer_evals : how many times a layer's fn() actually runs.  ZeRO-3
+        #               runs every layer TWICE (forward + recompute in
+        #               backward), which is real extra arithmetic.
+        # optim_elems : how many parameter elements this rank's Adam touches.
+        #               DDP updates all of them on every rank -- N-way
+        #               redundant work that ZeRO-1 removes along with the
+        #               memory.
+        self.layer_evals = 0
+        self.optim_elems = 0
 
         self.groups = []
         for gi, spec in enumerate(build_specs(cfg)):
@@ -249,6 +263,7 @@ class ZeroEngine:
             else:
                 P = unflatten(g["p"][:spec.numel], spec)
                 x = spec.fn(x, P)
+                self.layer_evals += 1
                 self.mem.mark("fwd/" + spec.name)
         logits = x
         loss = F.cross_entropy(
@@ -297,6 +312,7 @@ class ZeroEngine:
             else:                                   # zero1 / zero2
                 own = g["p"].data[g["lo"]:g["lo"] + g["shard_n"]]
                 grad = g["gshard"]
+            self.optim_elems += own.numel()
             g["m"].mul_(b1).add_(grad, alpha=1 - b1)
             g["v"].mul_(b2).addcmul_(grad, grad, value=1 - b2)
             denom = (g["v"] / bc2).sqrt_().add_(self.eps)
