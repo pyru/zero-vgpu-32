@@ -68,13 +68,30 @@ def main():
     for row in weight_agreement(results):
         print(f"  {row['stage']:9s} max|dW|={row['max_abs_weight_diff']:.3e}")
 
+    print("\n--- topology: 1 node of 32 vs 4 nodes of 8 ---")
+    single = {s: run_stage(s, cfg, world_size=args.world, steps=3,
+                           global_batch=args.batch, gpus_per_node=args.world)
+              for s in report.STAGE_ORDER}
+    multi = {s: run_stage(s, cfg, world_size=args.world, steps=3,
+                          global_batch=args.batch, gpus_per_node=8)
+             for s in report.STAGE_ORDER}
+    print("  " + single["ddp"]["topology"])
+    print("  " + multi["ddp"]["topology"])
+    for s in report.STAGE_ORDER:
+        a = single[s]["comm_seconds_modelled"] * 1e3 / 3
+        b = multi[s]["comm_seconds_modelled"] * 1e3 / 3
+        print(f"  {report.LABEL[s]:22s} 1 node {a:7.3f} ms   "
+              f"4 nodes {b:7.3f} ms   {b/a:.1f}x")
+
+
     print("\n--- figures ---")
     report.fig_losses(results, "assets/01_losses.png")
     report.fig_memory_breakdown(results, path="assets/02_memory_breakdown.png")
     report.fig_comm(results, path="assets/03_communication.png")
     report.fig_timeline(results, path="assets/04_timeline.png")
     report.fig_analytic(path="assets/06_analytic_7B.png")
-    print("  wrote assets/01..04, 06")
+    report.fig_topology(single, multi, "assets/07_topology.png")
+    print("  wrote assets/01..04, 06, 07")
 
     sweep = {}
     if not (args.no_sweep or args.quick):
@@ -104,6 +121,10 @@ def main():
         activations=v["peak_by_cat"]["activations"],
         peak_model_state=v["peak_model_state"], peak_total=v["peak_total"])
         for s, v in fair.items()}
+    dump["_topology"] = {s: dict(
+        single_node_ms=single[s]["comm_seconds_modelled"] * 1e3 / 3,
+        multi_node_ms=multi[s]["comm_seconds_modelled"] * 1e3 / 3)
+        for s in report.STAGE_ORDER}
     dump["_analytic_7p5B_N32"] = {k: v / GB for k, v in
                                   analytic_memory(7.5e9, 32).items()}
     with open("results.json", "w") as f:

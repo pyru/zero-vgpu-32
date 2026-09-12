@@ -59,7 +59,12 @@ rounds straight back to `w` and training silently stalls; you need a full-precis
 full-precision moments. Which means **optimizer state is 12 of the 16 bytes — 75% of the
 footprint.** The weights everyone thinks of as "the model" are 2 bytes out of 16.
 
-For a 7.5B model that is 120 GB *per GPU*, and here is what makes it a real problem:
+Put a concrete model through that: **30B parameters x 16 bytes = 480 GB = 447 GiB of
+training state.** A single 80 GB card holds ~74 GiB usable, so a 30B model needs **six cards
+just to hold it**, before a single FLOP of useful work happens. That is the wall.
+
+For a 7.5B model the same arithmetic gives 120 GB *per GPU*, and here is what makes it a real
+problem:
 **data parallelism does not reduce it by one byte.** DDP replicates. Buy 1000 GPUs and you own 1000
 identical copies of the same 120 GB. The memory ceiling on model size is completely independent of
 cluster size.
@@ -120,6 +125,74 @@ directly** via `torch.autograd.graph.saved_tensors_hooks` — every tensor autog
 backward pass is intercepted, de-duplicated by storage pointer, and charged at its full storage size
 (charging the view's `numel` would undercount by ~14%, since `qkv.split()` produces three views over
 one storage).
+
+### Vocabulary
+
+The fabric uses the standard distributed-training vocabulary, so the code reads the way the
+concepts are usually named:
+
+| term | in this repo | meaning |
+|---|---|---|
+| **node** | `Fabric(gpus_per_node=8)` | one physical box, almost always 8 GPUs |
+| **world size** | `Fabric(world_size=32)` | total GPUs across all nodes |
+| **rank** | `rank` arg to every worker | which GPU this is, 0..world_size-1 |
+| **collective** | `all_reduce`, `all_gather`, ... | an operation every rank runs together |
+| **interconnect** | `Interconnect` profiles | the wires: NVLink inside a box, fabric between boxes |
+| **Psi (or P)** | `comm_ratio_psi` | one full copy of the parameters; all comm volume is quoted as a multiple of it |
+
+So when the tables below say ZeRO-3 costs **3 Psi**, that means every step it pushes three full
+copies of the model through each GPU's link.
+
+### The cluster is not flat: what it costs to leave the box
+
+A 32-GPU cluster is not 32 equal peers. It is **4 nodes of 8**, and the two kinds of wire are
+an order of magnitude apart:
+
+* **inside a box** the 8 GPUs talk over NVLink/NVSwitch at ~450 GB/s
+* **between boxes** you get ~50 GB/s -- **9x slower**
+
+`Fabric(world_size=32, gpus_per_node=8)` models this. A ring collective is a *pipeline*, so it
+runs at the rate of its slowest hop: the instant a ring spans two boxes, the whole collective
+is paced by the inter-node link. Same bytes, different wire:
+
+| | 1 node x 32 GPUs | 4 nodes x 8 GPUs | penalty |
+|---|---|---|---|
+| DDP | 0.760 ms | 2.004 ms | 2.6x |
+| ZeRO-1 | 0.760 ms | 2.004 ms | 2.6x |
+| ZeRO-2 | 0.760 ms | 2.004 ms | 2.6x |
+| ZeRO-3 | 1.140 ms | 3.006 ms | 2.6x |
+
+![topology](assets/07_topology.png)
+
+The ratio is uniform, but the *absolute* penalty is not: ZeRO-3's premium over ZeRO-2 grows from
++0.38 ms inside one box to **+1.0 ms across four**. That is the practical rule -- ZeRO-3 is close
+to free on NVLink and progressively less attractive the more node boundaries your ring crosses.
+(Real NCCL softens this with hierarchical algorithms: reduce-scatter inside each node first, so
+only 1/8th of the data crosses the slow link. I model the flat ring, which is the pessimistic
+case, and say so.)
+
+### Why doesn't one GPU just do the averaging?
+
+The obvious question about all-reduce: instead of every GPU redundantly computing the same
+average, why not gather everything to rank 0, average once, and broadcast back?
+
+Because it does not scale, and the fabric makes the reason measurable. Gathering to one rank
+forces **2(N-1)Psi** through that single GPU's link, while a ring spreads it so every link
+carries only **2(N-1)/N Psi**:
+
+| N | ring all-reduce | gather to rank 0 + broadcast |
+|---|---|---|
+| 8 | 1.75 Psi | 14 Psi |
+| 32 | 1.94 Psi | 62 Psi |
+| 256 | 1.99 Psi | 510 Psi |
+
+The ring flattens out just below 2 Psi no matter how large the cluster gets; the centralised
+version grows linearly and saturates one poor GPU's wire. On top of that, while rank 0 reduces,
+the other 31 GPUs are idle -- and an idle GPU is the one thing a training run cannot afford.
+The "redundant" computation every rank performs is free, because they would otherwise be
+waiting anyway.
+
+That right-hand panel above is the whole argument in one chart.
 
 ---
 
@@ -411,13 +484,19 @@ exactly why DeepSpeed defaults to stage 2 and you reach for stage 3 when the mod
 fit. (Real ZeRO-3 also prefetches layer L+1's all-gather behind layer L's compute, hiding much of
 this; I do not model overlap, so these are pessimistic for stage 3.)
 
+And the numbers above are for a **flat** cluster. Section 2 shows what happens once the ring
+crosses node boundaries: ZeRO-3's premium over ZeRO-2 grows from **+0.38 ms inside one box to
++1.0 ms across four**. "Which ZeRO stage should I use" is not answerable without knowing your
+topology.
+
 ---
 
 ## 9. Repo layout & running it
 
 ```
 vgpu/
-  fabric.py      32 virtual GPUs, 4 collectives, ring cost model, interconnect profiles
+  fabric.py      32 virtual GPUs, 4 collectives, ring cost model, node topology
+                 (gpus_per_node) and intra-/inter-node interconnect profiles
   memory.py      per-rank memory ledger + activation measurement via saved_tensors_hooks
   model.py       TinyGPT as a list of (params, fn) LayerSpecs — the functional form ZeRO-3 needs
   zero.py        ZeroLayerFn (stage 3), CheckpointLayerFn (fairness control), ZeroEngine
@@ -446,6 +525,10 @@ that the point is memory and message accounting, not throughput).
 
 * **Comm time is modelled, not measured** (threads share RAM). Volumes, call counts and hop counts
   are real; the ring model ignores NCCL's tree algorithms for latency-bound messages.
+* **The multi-node model uses a flat ring**, paced by its slowest hop. Real NCCL is hierarchical
+  (reduce-scatter inside each node first, so only 1/8th of the data crosses the slow link), so my
+  inter-node penalty is an upper bound. The direction and the reason are right; the magnitude is
+  pessimistic.
 * **No compute/communication overlap or prefetch**, so all time numbers are a pessimistic bound for
   stage 3 in particular.
 * **fp32 throughout, not mixed precision.** fp32+Adam also happens to be 16 bytes/param (4+4+4+4), so
@@ -493,7 +576,19 @@ that the point is memory and message accounting, not throughput).
    measured floor was 1.17 MB against a predicted 0.44 MB, entirely because of the one-bucket
    transient. Finding out where a formula stops holding taught me more than reproducing it did.
 
-7. **Measure the confound before you quote the headline.** ZeRO-3 gets activation checkpointing for
+7. **The cluster is not flat, and that changes the answer.** 32 GPUs is 4 boxes of 8, with ~450
+   GB/s inside a box and ~50 GB/s between them. A ring runs at the speed of its slowest hop, so
+   crossing a node boundary costs 2.6x on every stage — and because ZeRO-3 moves 1.5x the bytes,
+   its *absolute* premium grows with every boundary crossed. I had been thinking about ZeRO as a
+   pure memory-vs-bandwidth trade; it is really memory-vs-bandwidth-vs-topology.
+
+8. **The "wasteful" redundant reduction is not wasteful.** Every GPU computing the same average
+   looked like obvious duplication until I worked out the alternative: gathering to one rank puts
+   2(N-1)Psi through a single wire (62 Psi at N=32, vs 1.94 Psi per link for the ring) and leaves
+   31 GPUs idle waiting on a result they cannot proceed without. The redundancy is free because
+   the GPUs had nothing else to do.
+
+9. **Measure the confound before you quote the headline.** ZeRO-3 gets activation checkpointing for
    free as a side effect of deleting its weights. Before controlling for that I would have quoted a
    number that was partly measuring something else.
 

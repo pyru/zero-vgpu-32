@@ -17,6 +17,7 @@ ZeRO paper does, without needing 32 real GPUs.
 """
 from __future__ import annotations
 
+import math
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -38,10 +39,15 @@ class Interconnect:
 
 
 PROFILES = {
-    "nvlink4": Interconnect("NVLink-4 / NVSwitch (intra-node)", 300.0, 2.0),
-    "pcie4":   Interconnect("PCIe 4.0 x16", 25.0, 8.0),
-    "ib400":   Interconnect("InfiniBand NDR 400 Gb/s", 50.0, 5.0),
-    "eth100":  Interconnect("100 Gb Ethernet", 12.5, 40.0),
+    # intra-node (inside one 8-GPU box): the GPUs talk over NVLink/NVSwitch
+    "nvlink450": Interconnect("NVLink / NVSwitch (intra-node)", 450.0, 2.0),
+    "nvlink4":   Interconnect("NVLink-4 (intra-node, conservative)", 300.0, 2.0),
+    # inter-node (box to box): an order of magnitude slower, and this is the
+    # single most important number in multi-node training
+    "internode50": Interconnect("Inter-node fabric (box to box)", 50.0, 5.0),
+    "ib400":       Interconnect("InfiniBand NDR 400 Gb/s", 50.0, 5.0),
+    "pcie4":       Interconnect("PCIe 4.0 x16", 25.0, 8.0),
+    "eth100":      Interconnect("100 Gb Ethernet", 12.5, 40.0),
 }
 
 
@@ -88,9 +94,29 @@ class VirtualGPU:
 class Fabric:
     """The interconnect + rank bookkeeping for `world_size` virtual GPUs."""
 
-    def __init__(self, world_size: int = 32, interconnect: str = "nvlink4"):
+    def __init__(self, world_size: int = 32, interconnect: str = "nvlink450",
+                 gpus_per_node: int | None = None,
+                 inter_node: str = "internode50"):
+        """A virtual cluster of `world_size` GPUs.
+
+        `gpus_per_node` makes the cluster *hierarchical*, the way a real one is:
+        8 GPUs sit in a box and talk over NVLink at ~450 GB/s, and boxes talk to
+        each other over a fabric roughly 9x slower.  Leave it None (or >=
+        world_size) for a flat single-node cluster.
+
+        A ring collective is a pipeline, so it runs at the rate of its slowest
+        hop: the moment a ring spans two boxes, the *whole* collective is paced
+        by the inter-node link.  That is the single most important fact about
+        multi-node training, and it is why NCCL actually uses hierarchical
+        (intra-node then inter-node) algorithms rather than one flat ring.
+        """
         self.world_size = world_size
-        self.link = PROFILES[interconnect]
+        self.gpus_per_node = gpus_per_node or world_size
+        self.n_nodes = math.ceil(world_size / self.gpus_per_node)
+        self.intra_link = PROFILES[interconnect]
+        self.inter_link = PROFILES[inter_node]
+        # a flat ring over several boxes is paced by the slow hop
+        self.link = self.intra_link if self.n_nodes == 1 else self.inter_link
         self.gpus = [VirtualGPU(r, world_size) for r in range(world_size)]
         self._barrier = threading.Barrier(world_size)
         self._slots: list = [None] * world_size
@@ -99,6 +125,23 @@ class Fabric:
     # -- helpers --------------------------------------------------------
     def gpu(self, rank: int) -> VirtualGPU:
         return self.gpus[rank]
+
+    def node_of(self, rank: int) -> int:
+        """Which physical box this rank lives in."""
+        return rank // self.gpus_per_node
+
+    def spans_nodes(self) -> bool:
+        return self.n_nodes > 1
+
+    def topology(self) -> str:
+        if self.n_nodes == 1:
+            return (f"{self.world_size} GPUs in 1 node, all on "
+                    f"{self.intra_link.name} @ {self.intra_link.bandwidth_GBps} GB/s")
+        return (f"{self.world_size} GPUs = {self.n_nodes} nodes x "
+                f"{self.gpus_per_node} GPUs; intra-node "
+                f"{self.intra_link.bandwidth_GBps} GB/s, inter-node "
+                f"{self.inter_link.bandwidth_GBps} GB/s "
+                f"({self.intra_link.bandwidth_GBps/self.inter_link.bandwidth_GBps:.0f}x slower)")
 
     def barrier(self) -> None:
         if self.world_size > 1:
@@ -234,5 +277,4 @@ class Fabric:
         return ops
 
     def __repr__(self) -> str:
-        return (f"<Fabric world_size={self.world_size} link={self.link.name} "
-                f"{self.link.bandwidth_GBps} GB/s>")
+        return f"<Fabric {self.topology()}>"

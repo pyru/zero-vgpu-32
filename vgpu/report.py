@@ -212,3 +212,52 @@ def table_summary(results, stages=("baseline",) + tuple(STAGE_ORDER)):
             "final loss": r["losses"][-1],
         })
     return pd.DataFrame(rows).set_index("stage").round(4)
+
+
+def fig_topology(single, multi, path=None):
+    """The cost of leaving the box.
+
+    `single` / `multi` are dicts stage -> run_stage result, one with all 32
+    vGPUs inside a single node, one spread over 4 nodes of 8.  Same bytes on
+    the wire in both cases -- only the slowest hop in the ring changed.
+    """
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4.5))
+    stages = STAGE_ORDER
+    xs, w = np.arange(len(stages)), 0.36
+
+    def ms(d, s):
+        return d[s]["comm_seconds_modelled"] * 1e3 / d[s]["steps"]
+
+    a = [ms(single, s) for s in stages]
+    b = [ms(multi, s) for s in stages]
+    ax1.bar(xs - w / 2, a, w, label="1 node x 32 GPUs (NVLink 450 GB/s)",
+            color="#55A868", edgecolor="white")
+    ax1.bar(xs + w / 2, b, w, label="4 nodes x 8 GPUs (inter-node 50 GB/s)",
+            color="#C44E52", edgecolor="white")
+    for i, (u, v) in enumerate(zip(a, b)):
+        ax1.text(i + w / 2, v * 1.02, f"{v/u:.1f}x", ha="center", fontsize=9,
+                 fontweight="bold")
+    ax1.set_xticks(xs)
+    ax1.set_xticklabels([LABEL[s] for s in stages], rotation=12)
+    _style(ax1, "Same bytes, different wires: the cost of leaving the box",
+           "", "modelled comm time per step (ms)")
+    ax1.legend(frameon=False, fontsize=9)
+
+    # why a ring, and not "gather everything to rank 0"?
+    Ns = np.array([2, 4, 8, 16, 32, 64, 128, 256])
+    ring = 2 * (Ns - 1) / Ns
+    central = 2 * (Ns - 1)
+    ax2.plot(Ns, ring, marker="o", lw=2, label=r"ring all-reduce  $2\frac{N-1}{N}\psi$")
+    ax2.plot(Ns, central, marker="s", lw=2,
+             label=r"gather to rank 0, broadcast back  $2(N-1)\psi$")
+    ax2.set_xscale("log", base=2)
+    ax2.set_yscale("log", base=2)
+    ax2.set_xticks(Ns)
+    ax2.set_xticklabels([str(n) for n in Ns])
+    _style(ax2, "Why every GPU does the same redundant reduction",
+           "number of GPUs (N)", r"traffic on the busiest link ($\times\psi$)")
+    ax2.legend(frameon=False, fontsize=9)
+    fig.tight_layout()
+    if path:
+        fig.savefig(path, dpi=150)
+    return fig

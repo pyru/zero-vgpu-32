@@ -12,8 +12,9 @@ from .zero import ZeroEngine
 
 
 def run_stage(stage, cfg, world_size=32, steps=10, global_batch=32, lr=3e-3,
-              seed=1234, interconnect="nvlink4", keep_gathered=False,
-              data_seed=7, checkpoint=False):
+              seed=1234, interconnect="nvlink450", keep_gathered=False,
+              data_seed=7, checkpoint=False, gpus_per_node=None,
+              inter_node="internode50"):
     """Train `steps` steps of `stage` on `world_size` virtual GPUs.
 
     The global batch is split evenly across ranks and the loss is normalised
@@ -21,7 +22,8 @@ def run_stage(stage, cfg, world_size=32, steps=10, global_batch=32, lr=3e-3,
     reduce-scatter reproduces single-device training exactly.
     """
     world = 1 if stage == "baseline" else world_size
-    fabric = Fabric(world, interconnect=interconnect)
+    fabric = Fabric(world, interconnect=interconnect,
+                    gpus_per_node=gpus_per_node, inter_node=inter_node)
     assert global_batch % world == 0
     local_bs = global_batch // world
     ntokens_global = global_batch * cfg.block_size
@@ -74,6 +76,8 @@ def run_stage(stage, cfg, world_size=32, steps=10, global_batch=32, lr=3e-3,
         comm_bytes_per_rank_per_step=g0.comm.total_bytes / max(steps, 1),
         comm_calls_per_step=g0.comm.total_calls / max(steps, 1),
         comm_seconds_modelled=g0.comm.total_seconds,
+        n_nodes=fabric.n_nodes, gpus_per_node=fabric.gpus_per_node,
+        topology=fabric.topology(),
         comm_by_op={op: b / max(steps, 1) for op, b in g0.comm.wire_bytes.items()},
         step_wall_seconds=sum(g.compute_seconds for g in fabric.gpus) / world,
         fabric=fabric, engines=engines,

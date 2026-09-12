@@ -3,7 +3,7 @@
     "stage": "baseline",
     "world_size": 1,
     "steps": 8,
-    "wall_s": 1.1689949000137858,
+    "wall_s": 1.7104991999804042,
     "params": 928512,
     "param_bytes": 3714048,
     "losses": [
@@ -30,15 +30,18 @@
     "comm_bytes_per_rank_per_step": 0.0,
     "comm_calls_per_step": 0.0,
     "comm_seconds_modelled": 0,
+    "n_nodes": 1,
+    "gpus_per_node": 1,
+    "topology": "1 GPUs in 1 node, all on NVLink / NVSwitch (intra-node) @ 450.0 GB/s",
     "comm_by_op": {},
-    "step_wall_seconds": 1.1541359000257216,
+    "step_wall_seconds": 1.6874243000056595,
     "comm_ratio_psi": 0.0
   },
   "ddp": {
     "stage": "ddp",
     "world_size": 32,
     "steps": 8,
-    "wall_s": 9.278419099980965,
+    "wall_s": 12.235245499992743,
     "params": 928512,
     "param_bytes": 3714048,
     "losses": [
@@ -64,18 +67,21 @@
     "resident_optimizer": 7428096,
     "comm_bytes_per_rank_per_step": 7195968.0,
     "comm_calls_per_step": 6.0,
-    "comm_seconds_modelled": 0.006143892480000004,
+    "comm_seconds_modelled": 0.006079928320000005,
+    "n_nodes": 1,
+    "gpus_per_node": 32,
+    "topology": "32 GPUs in 1 node, all on NVLink / NVSwitch (intra-node) @ 450.0 GB/s",
     "comm_by_op": {
       "all_reduce": 7195968.0
     },
-    "step_wall_seconds": 8.919585234379156,
+    "step_wall_seconds": 11.703145250007765,
     "comm_ratio_psi": 1.9375
   },
   "zero1": {
     "stage": "zero1",
     "world_size": 32,
     "steps": 8,
-    "wall_s": 9.24453219998395,
+    "wall_s": 12.976622299989685,
     "params": 928512,
     "param_bytes": 3714048,
     "losses": [
@@ -101,19 +107,22 @@
     "resident_optimizer": 232128,
     "comm_bytes_per_rank_per_step": 7195968.0,
     "comm_calls_per_step": 12.0,
-    "comm_seconds_modelled": 0.006143892480000004,
+    "comm_seconds_modelled": 0.006079928320000005,
+    "n_nodes": 1,
+    "gpus_per_node": 32,
+    "topology": "32 GPUs in 1 node, all on NVLink / NVSwitch (intra-node) @ 450.0 GB/s",
     "comm_by_op": {
       "reduce_scatter": 3597984.0,
       "all_gather": 3597984.0
     },
-    "step_wall_seconds": 8.931962068748362,
+    "step_wall_seconds": 12.50733931562445,
     "comm_ratio_psi": 1.9375
   },
   "zero2": {
     "stage": "zero2",
     "world_size": 32,
     "steps": 8,
-    "wall_s": 9.844437599997036,
+    "wall_s": 14.187890299974242,
     "params": 928512,
     "param_bytes": 3714048,
     "losses": [
@@ -139,19 +148,22 @@
     "resident_optimizer": 232128,
     "comm_bytes_per_rank_per_step": 7195968.0,
     "comm_calls_per_step": 12.0,
-    "comm_seconds_modelled": 0.006143892480000004,
+    "comm_seconds_modelled": 0.006079928320000004,
+    "n_nodes": 1,
+    "gpus_per_node": 32,
+    "topology": "32 GPUs in 1 node, all on NVLink / NVSwitch (intra-node) @ 450.0 GB/s",
     "comm_by_op": {
       "reduce_scatter": 3597984.0,
       "all_gather": 3597984.0
     },
-    "step_wall_seconds": 9.541726075000042,
+    "step_wall_seconds": 13.655121643753773,
     "comm_ratio_psi": 1.9375
   },
   "zero3": {
     "stage": "zero3",
     "world_size": 32,
     "steps": 8,
-    "wall_s": 11.891302700008964,
+    "wall_s": 16.601958799990825,
     "params": 928512,
     "param_bytes": 3714048,
     "losses": [
@@ -177,12 +189,15 @@
     "resident_optimizer": 232128,
     "comm_bytes_per_rank_per_step": 10793952.0,
     "comm_calls_per_step": 18.0,
-    "comm_seconds_modelled": 0.009215838719999998,
+    "comm_seconds_modelled": 0.009119892480000011,
+    "n_nodes": 1,
+    "gpus_per_node": 32,
+    "topology": "32 GPUs in 1 node, all on NVLink / NVSwitch (intra-node) @ 450.0 GB/s",
     "comm_by_op": {
       "all_gather": 7195968.0,
       "reduce_scatter": 3597984.0
     },
-    "step_wall_seconds": 11.555377090632646,
+    "step_wall_seconds": 16.10297111874297,
     "comm_ratio_psi": 2.90625
   },
   "_meta": {
@@ -346,6 +361,24 @@
       "activations": 212996,
       "peak_model_state": 1223856,
       "peak_total": 2229940
+    }
+  },
+  "_topology": {
+    "ddp": {
+      "single_node_ms": 0.75999104,
+      "multi_node_ms": 2.0039193600000003
+    },
+    "zero1": {
+      "single_node_ms": 0.75999104,
+      "multi_node_ms": 2.0039193600000003
+    },
+    "zero2": {
+      "single_node_ms": 0.75999104,
+      "multi_node_ms": 2.0039193600000003
+    },
+    "zero3": {
+      "single_node_ms": 1.1399865600000003,
+      "multi_node_ms": 3.0058790399999995
     }
   },
   "_analytic_7p5B_N32": {
