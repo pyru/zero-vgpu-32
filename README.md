@@ -7,7 +7,7 @@ GPT end to end.
 Nothing is mocked. The collectives move real tensors, the optimizer really does update only the slice
 of the weights a rank owns, and under ZeRO-3 the full weight matrix genuinely does not exist in any
 rank's memory except during the microsecond its layer is computing. All five configurations
-(1 GPU, DDP, ZeRO-1, ZeRO-2, ZeRO-3) train to the **same loss and the same final weights** — which is
+(1 GPU, ZeRO-0/DDP, ZeRO-1, ZeRO-2, ZeRO-3) train to the **same loss and the same final weights** — which is
 the only acceptable proof that a memory optimization is actually a memory optimization.
 
 📓 **[`ZeRO_on_32_Virtual_GPUs.ipynb`](ZeRO_on_32_Virtual_GPUs.ipynb)** — the full walkthrough with
@@ -22,7 +22,7 @@ TinyGPT, 928,512 parameters, fp32 + Adam (16 bytes/param), 32 virtual GPUs, glob
 | | **model state / GPU** | params | grads | optimizer | comm / step | loss 0 → 8 |
 |---|---|---|---|---|---|---|
 | 1 GPU (batch 32) | 14.17 MB | 3.54 | 3.54 | 7.08 | — | 6.2725 → 4.9970 |
-| DDP (no ZeRO) | **14.17 MB** | 3.54 | 3.54 | 7.08 | 1.938 ψ | 6.2725 → 4.9970 |
+| ZeRO-0 · plain DDP | **14.17 MB** | 3.54 | 3.54 | 7.08 | 1.938 ψ | 6.2725 → 4.9970 |
 | ZeRO-1 · $P_{os}$ | **7.31 MB** | 3.54 | 3.54 | **0.22** | 1.938 ψ | 6.2725 → 4.9970 |
 | ZeRO-2 · $P_{os+g}$ | **4.60 MB** | 3.54 | **0.84** | **0.22** | 1.938 ψ | 6.2725 → 4.9970 |
 | ZeRO-3 · $P_{os+g+p}$ | **1.17 MB** | **0.11** | **0.84** | **0.22** | 2.906 ψ | 6.2725 → 4.9970 |
@@ -78,7 +78,7 @@ The three stages just answer *how much are we willing to partition?*
 
 | | optimizer | gradients | parameters | memory/GPU |
 |---|---|---|---|---|
-| DDP | replicated | replicated | replicated | $16\Psi$ |
+| **ZeRO-0** (plain DDP) | replicated | replicated | replicated | $16\Psi$ |
 | **ZeRO-1** $P_{os}$ | **sharded** | replicated | replicated | $4\Psi + 12\Psi/N$ |
 | **ZeRO-2** $P_{os+g}$ | **sharded** | **sharded** | replicated | $2\Psi + 14\Psi/N$ |
 | **ZeRO-3** $P_{os+g+p}$ | **sharded** | **sharded** | **sharded** | $16\Psi/N$ |
@@ -224,7 +224,12 @@ straight back to the flat buffer.
 
 ## 4. The stages, and what I learned implementing each
 
-### DDP — the baseline worth understanding first
+### ZeRO-0 (plain DDP) — the baseline worth understanding first
+
+"ZeRO stage 0" is ZeRO switched off: in DeepSpeed's config, `"stage": 0` means every rank keeps a
+full replica of parameters, gradients and optimizer state, and gradients are all-reduced. That is
+exactly plain data-parallel training (DDP), so throughout this repo **ZeRO-0 and DDP are the same
+run** — the `ddp` stage in the code, labelled "DDP (no ZeRO)" in the figures.
 
 DDP does one thing well and one thing not at all:
 
